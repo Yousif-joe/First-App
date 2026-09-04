@@ -1,0 +1,55 @@
+// PowerSchool Support Portal — database schema
+// SQLite is used for simplicity (single-file DB, no server to run).
+// If you outgrow SQLite (e.g. multiple write-heavy instances on Vercel,
+// which has an ephemeral filesystem), swap `provider`/`url` for Postgres —
+// the rest of the app only talks to Prisma, so no app code changes needed.
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// One row per question an admin asks the portal.
+model Case {
+  id       String @id @default(cuid())
+
+  // Who asked
+  adminName  String
+  adminEmail String
+
+  // What they asked
+  category String
+  question String
+
+  // Claude's response (nullable: the Anthropic call can fail and we still
+  // want to keep the case + let the admin escalate straight away)
+  answer      String?
+  answerError String? // set when the Claude call failed, for troubleshooting
+
+  // Feedback loop
+  // null   = admin hasn't answered "Was this helpful?" yet
+  // true   = yes, resolved
+  // false  = no, escalated to the support lead
+  helpful Boolean?
+
+  // Escalation (only relevant when helpful = false)
+  escalated          Boolean  @default(false)
+  escalationDetails  String?
+  escalationEmailSent Boolean @default(false)
+  resolvedEmailSent   Boolean @default(false)
+
+  // Derived status kept denormalized for cheap filtering on /admin/cases
+  // "pending" | "resolved" | "escalated"
+  status String @default("pending")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([category])
+  @@index([status])
+  @@index([helpful])
+}
